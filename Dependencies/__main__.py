@@ -2,7 +2,7 @@
 Author: Oren Sitton
 File: __main__.py
 Python Version: 3
-Description:
+Description: main FullNode program, runs full node (p2p network connection, block mining)
 """
 import datetime
 import logging
@@ -60,13 +60,15 @@ except ModuleNotFoundError:
 Global Variables
 ----------------
 client_sockets : SyncedArray
-    list of current client sockets connected to other node's server sockets
+    list of current sockets connected to node
 transactions : SyncedArray
     list of pending transactions
-flags : Flags
+thread_queue : queue.Queue
+    queue to load return value from mining thread
+flags : SyncedDictionary
     flags object to coordinate between threads
 message_queues : queue.Queue
-    dictionary of address : queue of pending messages to address
+    dictionary of {address : queue} of pending messages to address
 """
 
 sockets = SyncedArray()
@@ -84,13 +86,13 @@ def config(key, directory="Dependencies\\config.cfg"):
     """
     returns data from configuration file
     :param key: dictionary key to return value of
-    :type key: str
+    :type key: Any
     :param directory: directory of configuration file, default Dependencies\\config.cfg
     :type directory: str
-    :return: value of dictionary for key
+    :return: value of dictionary for specified key
     :rtype: Any
     :raises: FileNotFoundError: configuration file not found at directory
-    :raises: TypeError: unpickled object is not a dictionary
+    :raises: TypeError: pickled object is not a dictionary
     """
     if not isinstance(key, str):
         raise TypeError("config: expected key to be of type str")
@@ -108,15 +110,14 @@ def config(key, directory="Dependencies\\config.cfg"):
             return configuration.get(key)
 
 
-def initialize_client(ip, port):
+def initialize_connection(ip, port):
     """
-    initializes client socket object to address and appends it to client_socket list
-    :param ip: ipv4 address to initialize client socket to
+    initializes new connection socket to address and appends it to sockets list, adds get most recent block message to
+    queue for new connection.
+    :param ip: ipv4 address to initialize socket to
     :type ip: str
-    :param port: tcp port to initialize client socket to
+    :param port: tcp port to initialize socket to
     :type port: int
-    :return: client socket object
-    :rtype: socket.socket
     """
     if not isinstance(ip, str):
         raise TypeError("initialize_client: expected ip to be of type str")
@@ -127,20 +128,19 @@ def initialize_client(ip, port):
 
     for sock in sockets:
         if sock.getpeername()[0] == ip:
-            logging.info("[{}, {}]: Connection already exists".format(ip, port))
+            logging.info("Server: Connection attempted to [{}, {}], but connection already exists".format(ip, port))
             return
 
     try:
-        logging.info("Attempting connection to [{}, {}]".format(ip, port))
         client_socket.connect((ip, port))
-        logging.info("[{}, {}]: Connected client socket to node"
-                     .format(client_socket.getpeername()[0], client_socket.getpeername()[1]))
 
     except (ConnectionRefusedError, socket.gaierror, TimeoutError, WindowsError):
-        logging.info("[{}, {}]: Connection attempt refused"
+        logging.info("Server: Connection attempt to [{}, {}] refused"
                      .format(ip, port))
 
     else:
+        logging.info("Server: Connected to [{}, {}]"
+                     .format(client_socket.getpeername()[0], client_socket.getpeername()[1]))
         sockets.append(client_socket)
 
         if client_socket.getpeername()[0] not in message_queues:
@@ -149,12 +149,12 @@ def initialize_client(ip, port):
             ("00047c0000000000000000000000000000000000000000000000000000000000000000000000", "block request"))
 
 
-def initialize_clients(addresses, port):
+def initialize_connections(addresses, port):
     """
-    initializes client socket objects to addresses and appends them to client_socket list
-    :param addresses: ipv4 addresses to initialize client sockets to
+    initializes connection sockets to addresses and appends them to sockets list
+    :param addresses: ipv4 addresses to initialize sockets to
     :type addresses: list
-    :param port: tcp port to initialize client sockets to
+    :param port: tcp port to initialize sockets to
     :type port: int
     """
     if not isinstance(addresses, list):
@@ -173,16 +173,13 @@ def initialize_clients(addresses, port):
                     pass
                     # sock is server socket
             if not exists:
-                thread = threading.Thread(name="Client Connection Thread {}".format(i + 1), target=initialize_client,
+                thread = threading.Thread(name="Client Connection Thread {}".format(i + 1), target=initialize_connection,
                                           args=(address, port,))
                 thread.start()
                 threads.append(thread)
 
     for thread in threads:
         thread.join()
-
-    logging.info("{} nodes accepted connection"
-                 .format(len(sockets)))
 
 
 def initialize_server(ip, port):
@@ -201,10 +198,10 @@ def initialize_server(ip, port):
         raise TypeError("initialize_server: expected port to be of type int")
     try:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # server_socket.setblocking(False)
         server_socket.bind((ip, port))
         server_socket.listen(5)
     except OSError:
+        logging.info("Server: failed to initialize socket object")
         return None
     else:
         return server_socket
@@ -212,13 +209,13 @@ def initialize_server(ip, port):
 
 def seed_clients(dns_ip, dns_port, peer_port, **kwargs):
     """
-    seeds nodes from DNS seeding server, initializes client socket objects to received addresses, and appends them to
-    client_socket list
+    seeds nodes from DNS seeding server, initializes connection sockets to received addresses, and appends them to
+    sockets list
     :param dns_ip: ipv4 address of DNS seeding server
     :type dns_ip: str
     :param dns_port: tcp port of DNS seeding server
     :type dns_port: int
-    :param peer_port: tcp port to initialize client sockets to
+    :param peer_port: tcp port to initialize connection sockets to
     :type peer_port: int
     :keyword attempts: amount of times to attempt connection to the DNS seeding server
     :keyword type attempts: int
@@ -283,9 +280,9 @@ def seed_clients(dns_ip, dns_port, peer_port, **kwargs):
 
     seed_client.close()
 
-    logging.info("Seeding yielded {} addresses".format(len(peer_addresses)))
+    logging.info("Seeding server accepted connection & yielded {} addresses".format(len(peer_addresses)))
 
-    initialize_clients(peer_addresses, peer_port)
+    initialize_connections(peer_addresses, peer_port)
 
     flags["finished seeding"] = True
 
@@ -323,7 +320,7 @@ def calculate_difficulty(delta_t, prev_difficulty):
 def calculate_merkle_root_hash(block_transactions):
     """
     calculates the merkle tree root hash of the block's transactions
-    :param block_transactions: list of the blocks transactions
+    :param block_transactions: list of the blocks transactions, in order
     :type block_transactions: list
     :return: merkle tree root hash of the block's transactions
     :rtype: str
@@ -350,6 +347,13 @@ def calculate_merkle_root_hash(block_transactions):
 
 
 def calculate_message_length(message):
+    """
+    calculates the prefix length of the message, per the SittCoin protocol (groups of 5)
+    :param message: message to calculate length of
+    :type message: str
+    :return: length of block in groups of 5 hexadecimal string
+    :rtype: str
+    """
     length_size = 5
 
     resume = True
@@ -631,7 +635,7 @@ def handle_message(message, blockchain):
     redirects message to relevant message handling function
     :param message: message to handle
     :type message: str
-    :param blockchain: BLockchain to use for relevant messages
+    :param blockchain: Blockchain to use for relevant messages
     :type blockchain: Blockchain
     :return: reply message, along with an int to specify who to reply to (-1: no one, 1: message sender, 2: all nodes)
     :rtype: tuple
@@ -652,7 +656,7 @@ def handle_message(message, blockchain):
     message_type = message[:1]
 
     if message_type not in message_handling_functions:
-        logging.debug("Message is invalid (unrecognized message type)")
+        logging.info("Message is invalid (unrecognized message type)")
         reply = build_error_message("unrecognized message type")
         reply = "{}{}".format(calculate_message_length(reply), reply)
         return reply, "error", 1
@@ -696,6 +700,7 @@ def handle_message_block(message, blockchain):
         if not previous_block and block.block_number > blockchain.__len__():
             msg = build_get_blocks_message(blockchain.__len__(), block.block_number)
             msg = "{}{}".format(hexify(len(msg), 5), msg)
+            logging.info("Message is an advanced block")
             return msg, "blocks request", 1
         elif not previous_block:
             logging.info("Message is an invalid block [block is not in consensus chain]")
@@ -730,7 +735,7 @@ def handle_message_block(message, blockchain):
     int_hash = int(b_hash, 16)
 
     if int_hash > maximum:
-        logging.info("Message is an invalid block [hash does not match difficulty]")
+        logging.info("Message is an invalid block [nonce does not meet difficulty requirement]")
         return None, "", -1
 
     # validate first transaction
@@ -783,16 +788,12 @@ def handle_message_block(message, blockchain):
             if block2.self_hash != blockchain.get_block_consensus_chain(block.block_number - 2).self_hash:
                 blockchain.delete(block2.self_hash)
 
-    # raise flag if appropriate
-    if blockchain.get_block_consensus_chain(blockchain.__len__()).self_hash == block.self_hash:
-        flags["received new block"] = True
-
     # remove transactions from list if necessary
     for t in transactions:
         if not validate_transaction(t, blockchain):
             transactions.remove(t)
 
-    logging.info("Message is a valid block")
+    logging.info("Message is a valid block message. Block was appended to SQL server.")
     msg = "{}{}".format(calculate_message_length(block.network_format()), block.network_format())
     return msg, "block", 1
 
@@ -813,7 +814,7 @@ def handle_message_block_request(message, blockchain):
         raise TypeError("handle_message_block_request: expected blockchain to be of type Blockchain")
     if len(message) != 71:
         # message not in correct format
-        logging.info("Message is an invalid block request")
+        logging.info("Message is an invalid block request [message is in an incorrect format]")
         return None, "", -1
     else:
         block_number = int(message[1:7], 16)
@@ -821,12 +822,13 @@ def handle_message_block_request(message, blockchain):
 
         if block_number == 0 and previous_block_hash.replace("0", ""):
             # message in incorrect format
-            logging.info("Message is an invalid block request")
+            logging.info("Message is an invalid block request [message is in an incorrect format - block number is 0, but previous hash is not]")
             return None, "", -1
         elif block_number == 0:
             try:
                 block = blockchain.get_block_consensus_chain(blockchain.__len__())
             except IndexError:
+                logging.info("Message is an invalid block request [local blockchain does not contain any blocks]")
                 return None, "", -1
         else:
             # return requested block if have, else return nothing
@@ -838,7 +840,7 @@ def handle_message_block_request(message, blockchain):
             msg = "{}{}".format(calculate_message_length(reply), reply)
             return msg, "block", 1
         else:
-            logging.info("Message is an invalid block request")
+            logging.info("Message is an invalid block request [local blockchain does not have requested block]")
             return None, "", -1
 
 
@@ -861,6 +863,8 @@ def handle_message_blocks(message, blockchain):
     message = message[1:]
     block_count = int(message[:6], 16)
     message = message[6:]
+
+    logging.info("Message is a blocks message, proceeding to handle each block individually")
 
     while message:
         size_length = 5
@@ -904,7 +908,7 @@ def handle_message_blocks_request(message, blockchain):
         try:
             block = blockchain.get_block_consensus_chain(i)
         except IndexError:
-            logging.info("Message is an invalid blocks request")
+            logging.info("Message is an invalid blocks request [local blockchain does not contain requested blocks]")
             return None, "", -1
         else:
             if block:
@@ -939,11 +943,11 @@ def handle_message_peers(message):
     if not isinstance(message, str):
         raise TypeError("handle_message_peers: expected message to be of type str")
     if len(message) < 3:
-        logging.info("Message is an invalid peer message")
+        logging.info("Message is an invalid peers message [message is in an invalid format]")
         return None, "", -1
     peer_count = int(message[1:3], 16)
     if len(message) < 3 + 8 * peer_count:
-        logging.info("Message is an invalid peer message")
+        logging.info("Message is an invalid peers message [message is in an invalid format]")
         return None, "", -1
     logging.info("Message is a peer message")
     message = message[3:]
@@ -958,7 +962,9 @@ def handle_message_peers(message):
         address = "{}.{}.{}.{}".format(byte1, byte2, byte3, byte4)
         addresses.append(address)
         message = message[8:]
-    threading.Thread(name="Peer Seeding Thread", target=initialize_clients, args=(addresses, 8333,)).start()
+    threading.Thread(name="Peer Seeding Thread", target=initialize_connections, args=(addresses, 8333,)).start()
+
+    logging.info("Message is a valid peers message")
     return None, "", -1
 
 
@@ -1021,8 +1027,6 @@ def main():
     global message_queues
 
     # initiate flags
-    flags["received new block"] = False
-    flags["created new block"] = False
     flags["exception"] = False
     flags["finished seeding"] = False
 
@@ -1047,7 +1051,7 @@ def main():
     else:
         logging.info("Server: Initiated [{}, {}]".format(server_socket.getsockname()[0], server_socket.getsockname()[1]))
 
-    # initiate seeding
+    # initiate seeding & mining thread
     seeding_thread = threading.Thread(name="Seeding Thread", target=seed_clients, args=(seed_ip, seed_port, port,))
     seeding_thread.start()
 
@@ -1115,7 +1119,7 @@ def main():
                                     logging.info("[{}, {}]: No reply")
 
                                 if reply[2] == 1:
-                                    logging.info("[{}, {}]: Replying to sender")
+                                    logging.info("[{}, {}]: Sending reply to sender only")
                                     if sock.getpeername()[0] not in message_queues:
                                         message_queues[sock.getpeername()[0]] = queue.Queue()
                                     message_queues[sock.getpeername()[0]].put((reply[0], reply[1]))
