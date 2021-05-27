@@ -1305,7 +1305,7 @@ def main():
 
         for address in message_queues:
             exists = False
-            for sock in wallet_inputs:
+            for sock in inputs:
                 try:
                     if sock.getpeername()[0] == address:
                         exists = True
@@ -1328,7 +1328,7 @@ def main():
 
                 logging.info("WS [{}, {}]: Node connected to server")
 
-                if not address in wallet_message_queues:
+                if address not in wallet_message_queues:
                     wallet_message_queues[address] = queue.Queue()
 
             else:
@@ -1375,7 +1375,6 @@ def main():
                     else:
                         sock.close()
                         wallet_inputs.remove(sock)
-
 
         for sock in writable:
             if sock in wallet_inputs:
