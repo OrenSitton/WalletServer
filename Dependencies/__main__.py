@@ -1124,8 +1124,8 @@ def wallet_handle_message(message, blockchain):
     """
 
     message_types = dict(a=lambda: handle_wallet_message(message, blockchain),
-                         b=lambda: handle_wallet_payment(message, blockchain),
-                         c=lambda: handle_message_transaction(message, blockchain))
+                         c=lambda: handle_wallet_payment(message, blockchain),
+                         e=lambda: handle_message_transaction(message, blockchain))
 
     message_type = message[:1]
 
