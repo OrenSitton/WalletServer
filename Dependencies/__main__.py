@@ -1097,7 +1097,10 @@ def wallet_handle_message(message, blockchain):
         "k":lambda: handle_wallet_payment(message, blockchain),
         "e": lambda: handle_message_transaction(message, blockchain)
     }
-    pass
+
+    message_type = message[:1]
+
+    return message_types[message_type]()
 
 
 def handle_wallet_message(message, blockchain):
@@ -1365,7 +1368,7 @@ def main():
                             size = int(size, 16)
 
                             try:
-                                data = sock.recv(size)
+                                data = sock.recv(size).decode()
                             except connection_errors:
                                 sock.close()
                                 wallet_inputs.remove(sock)
