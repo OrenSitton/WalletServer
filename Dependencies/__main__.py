@@ -1178,7 +1178,6 @@ def main():
         logging.info("Wallet Server: Initiated [{}, {}]".format(wallet_ip, wallet_port))
 
     wallet_inputs = []
-    wallet_message_queues = {}
 
     while True:
         inputs = sockets.array + [server_socket]
@@ -1337,104 +1336,73 @@ def main():
             logging.info("[{}, N/A] Node disconnected".format(address))
             del message_queues[address]
 
-        readable, writable, exceptional = select.select([wallet_server_socket] + wallet_inputs, wallet_inputs, wallet_inputs, 0)
+        readable, writable, exceptional = select.select([wallet_server_socket] + wallet_inputs, [], wallet_inputs, 0)
 
         for sock in readable:
             if sock is wallet_server_socket:
                 client_socket, address = wallet_server_socket.accept()
+                client_socket.setblocking(False)
                 wallet_inputs.append(client_socket)
 
                 logging.info("WS [{}, {}]: Node connected to server")
 
-                if address not in wallet_message_queues:
-                    wallet_message_queues[address] = queue.Queue()
-
             else:
                 try:
-                    size = sock.recv(5).decode()
+                    address = sock.getpeername()[0]
                 except connection_errors:
                     sock.close()
                     wallet_inputs.remove(sock)
+                    logging.info("[N/A, N/A]: Client disconnected")
                 else:
-                    if size:
-                        size = int(size, 16)
-
-                        try:
-                            data = sock.recv(size)
-                            address = sock.getpeername()
-                        except connection_errors:
-                            sock.close()
-                            wallet_inputs.remove(sock)
-                        else:
-                            logging.info("WS [{}, {}]: Received message from node".format(address[0], address[1]))
-                            reply = wallet_handle_message(data, blockchain)
-
-                            if reply[2] == -1:
-                                logging.info("WS [{}, {}]: Not sending reply to message")
-
-                            elif reply[2] == 1:
-                                if address[0] not in wallet_message_queues:
-                                    wallet_message_queues[address] = queue.Queue()
-                                wallet_message_queues[address].put((reply[0], reply[1]))
-                                logging.info("WS [{}, {}]: Sending reply to sender only".format(address[0], address[1]))
-
-                            elif reply[2] == 2:
-                                for node_socks in sockets:
-                                    try:
-                                        address = node_socks.getpeername()[0]
-                                    except connection_errors:
-                                        pass
-                                    else:
-                                        if address not in message_queues:
-                                            message_queues[address] = queue.Queue()
-                                        message_queues[address].put((reply[0], reply[1]))
-                                logging.info("WS [{}, {}]: Sending reply to all peer nodes".format(address[0], address[1]))
-
-                    else:
+                    try:
+                        size = sock.recv(5).decode()
+                    except connection_errors:
                         sock.close()
                         wallet_inputs.remove(sock)
+                        logging.info("[{}, {}]: Client disconnected".format(address[0], address[1]))
+                    else:
+                        if size:
+                            size = int(size, 16)
 
-        for sock in writable:
-            if sock in wallet_inputs:
-                try:
-                    address = sock.getpeername()
-                except connection_errors:
-                    sock.close()
-                    wallet_inputs.remove(sock)
-
-                else:
-                    if address in message_queues:
-                        if not message_queues[address].empty():
-                            message = message_queues[address].get()
                             try:
-                                sock.send(message[0].encode())
+                                data = sock.recv(size)
                             except connection_errors:
                                 sock.close()
                                 wallet_inputs.remove(sock)
+                                logging.info("[{}, {}]: Client disconnected".format(address[0], address[1]))
                             else:
-                                logging.info("WS [{}, {}]: Sent {} message to client".format(address[0], address[1], message[1]))
+                                logging.info("WS [{}, {}]: Received message from node".format(address[0], address[1]))
+                                reply = wallet_handle_message(data, blockchain)
+
+                                if reply[2] == -1:
+                                    logging.info("WS [{}, {}]: Not sending reply to message")
+
+                                elif reply[2] == 1:
+                                    logging.info("WS [{}, {}]: Sending reply to sender only".format(address[0], address[1]))
+
+                                    sock.send(reply[0].encode())
+
+                                    logging.info("WS [{}, {}]: Sent {} message to client".format(address[0], address[1], reply[1]))
+
+                                elif reply[2] == 2:
+                                    for node_socks in sockets:
+                                        try:
+                                            address = node_socks.getpeername()[0]
+                                        except connection_errors:
+                                            pass
+                                        else:
+                                            if address not in message_queues:
+                                                message_queues[address] = queue.Queue()
+                                            message_queues[address].put((reply[0], reply[1]))
+                                    logging.info("WS [{}, {}]: Sending reply to all peer nodes".format(address[0], address[1]))
+                        else:
+                            sock.close()
+                            wallet_inputs.remove(sock)
 
         for sock in exceptional:
             if sock in wallet_inputs:
                 sock.close()
                 wallet_inputs.remove(sock)
-
-        sock_removals = []
-
-        for address in wallet_message_queues:
-            exists = False
-            for sock in wallet_inputs:
-                try:
-                    if sock.getpeername() == address:
-                        exists = True
-                except connection_errors:
-                    pass
-            if not exists:
-                sock_removals.append(address)
-
-        for address in sock_removals:
-            logging.info("WS [{}, {}]: Client disconnected".format(address[0], address[1]))
-            del wallet_message_queues[address]
 
 
 if __name__ == '__main__':
