@@ -1166,7 +1166,7 @@ def handle_wallet_payment(message, blockchain):
 
     if wallet_amount < amount:
         msg = build_error_message("insufficient funds")
-        msg = "{}{}".format(hexify(msg, 5), msg)
+        msg = "{}{}".format(hexify(len(msg), 5), msg)
         return msg, "error", 1
 
     else:
