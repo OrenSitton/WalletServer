@@ -173,7 +173,8 @@ def initialize_connections(addresses, port):
                     pass
                     # sock is server socket
             if not exists:
-                thread = threading.Thread(name="Client Connection Thread {}".format(i + 1), target=initialize_connection,
+                thread = threading.Thread(name="Client Connection Thread {}".format(i + 1),
+                                          target=initialize_connection,
                                           args=(address, port,))
                 thread.start()
                 threads.append(thread)
@@ -822,7 +823,8 @@ def handle_message_block_request(message, blockchain):
 
         if block_number == 0 and previous_block_hash.replace("0", ""):
             # message in incorrect format
-            logging.info("Message is an invalid block request [message is in an incorrect format - block number is 0, but previous hash is not]")
+            logging.info(
+                "Message is an invalid block request [message is in an incorrect format - block number is 0, but previous hash is not]")
             return None, "", -1
         elif block_number == 0:
             try:
@@ -1013,6 +1015,97 @@ def handle_message_transaction(message, blockchain):
             logging.info("Message is an invalid transaction message [{}]".format(msg_validity[1]))
             return None, "", -1
 
+"""
+Wallet Calculation Functions
+"""
+
+
+def get_transactions(public_key, blockchain):
+    """
+
+    :param public_key:
+    :type public_key: str
+    :param blockchain:
+    :type blockchain: Blockchain
+    :return:
+    :rtype: list
+    """
+    key_transactions = []
+    for x in range(1, len(blockchain) + 1):
+        for t in blockchain.get_block_consensus_chain(x).transactions:
+            added = False
+            for inp in t.inputs:
+                if inp[0] == public_key:
+                    if not added:
+                        key_transactions.append(t)
+                        added = True
+
+            for output in t.outputs:
+                if output[0] == public_key:
+                    if not added:
+                        key_transactions.append(t)
+                        added = True
+
+    return key_transactions
+
+
+def find_wallet_amonut(public_key, transaction_list, blockchain):
+    """
+
+    :param public_key:
+    :type public_key: str
+    :param transaction_list:
+    :type transaction_list: list
+    :param blockchain:
+    :type blockchain: Blockchain
+    :return:
+    :rtype: int
+    """
+    wallet_amount = 0
+    t: Transaction
+    for t in transaction_list:
+        for inp in t.inputs:
+            if inp[0] == public_key:
+                other_transaction = blockchain.get_block_consensus_chain(inp[1]).transactions[inp[2] - 1]
+                for output in other_transaction:
+                    if output[0] == public_key:
+                        wallet_amount -= output[1]
+
+        for output in t.outputs:
+            if output[0] == public_key:
+                wallet_amount += output[1]
+    return wallet_amount
+
+"""
+Wallet Server Functions
+"""
+
+
+def wallet_handle_message(message, blockchain):
+    """
+
+    :param message:
+    :type message: str
+    :param blockchain:
+    :type blockchain: Blockchain
+    :return:
+    :rtype: tuple
+    """
+
+    message_types = {
+        "h":lambda: handle_wallet_message(message, blockchain),
+        "i":lambda: handle_wallet_payment(message, blockchain),
+        "e": lambda: handle_message_transaction(message, blockchain)
+    }
+    pass
+
+def handle_wallet_message(message, blockchain):
+    msg = "j"
+    pass
+
+def handle_wallet_payment(message, blockchain):
+    pass
+
 
 """
 Main Function
@@ -1031,8 +1124,10 @@ def main():
     flags["finished seeding"] = False
 
     # get variables from configuration file
-    ip = config("ip address")
-    port = config("port")
+    ip = config("node ip address")
+    port = config("node port")
+    wallet_ip = config("wallet ip address")
+    wallet_port = config("wallet port")
     seed_ip = config("seed address")
     seed_port = config("seed port")
     sql_address = config("sql address")
@@ -1049,11 +1144,23 @@ def main():
         logging.critical("Server: Could not initialize socket. Terminating...")
         exit(-1)
     else:
-        logging.info("Server: Initiated [{}, {}]".format(server_socket.getsockname()[0], server_socket.getsockname()[1]))
+        logging.info(
+            "Server: Initiated [{}, {}]".format(server_socket.getsockname()[0], server_socket.getsockname()[1]))
 
     # initiate seeding & mining thread
     seeding_thread = threading.Thread(name="Seeding Thread", target=seed_clients, args=(seed_ip, seed_port, port,))
     seeding_thread.start()
+
+    # initiate wallet server variables
+    wallet_server_socket = initialize_server(wallet_ip, wallet_port)
+    if not wallet_server_socket:
+        logging.critical("Wallet Server: Could not initialize socket. Terminating...")
+        exit(-1)
+    else:
+        logging.info("Wallet Server: Initiated [{}, {}]".format(wallet_ip, wallet_port))
+
+    wallet_inputs = []
+    wallet_message_queues = {}
 
     while True:
         inputs = sockets.array + [server_socket]
@@ -1069,7 +1176,8 @@ def main():
                         exists = True
 
                 if exists:
-                    logging.info("[{}, {}]: Node attempted connection to server, but connection already exists".format(address[0], address[1]))
+                    logging.info("[{}, {}]: Node attempted connection to server, but connection already exists".format(
+                        address[0], address[1]))
                     client_socket.close()
                 else:
                     sockets.append(client_socket)
@@ -1079,7 +1187,9 @@ def main():
 
                     if address[0] not in message_queues:
                         message_queues[address[0]] = queue.Queue()
-                    message_queues[address[0]].put(("00047c0000000000000000000000000000000000000000000000000000000000000000000000", "block request"))
+                    message_queues[address[0]].put((
+                                                   "00047c0000000000000000000000000000000000000000000000000000000000000000000000",
+                                                   "block request"))
 
             else:
                 try:
@@ -1165,7 +1275,8 @@ def main():
                                 sock.close()
                                 sockets.remove(sock)
                             else:
-                                logging.info("[{}, {}]: Sent {} message to node".format(address[0], address[1], message[1]))
+                                logging.info(
+                                    "[{}, {}]: Sent {} message to node".format(address[0], address[1], message[1]))
 
         for sock in exceptional:
             if sock in sockets:
@@ -1194,9 +1305,13 @@ def main():
 
         for address in message_queues:
             exists = False
-            for sock in sockets:
-                if sock.getpeername()[0] == address:
-                    exists = True
+            for sock in wallet_inputs:
+                try:
+                    if sock.getpeername()[0] == address:
+                        exists = True
+                except connection_errors:
+                    pass
+
             if not exists:
                 sock_removals.append(address)
 
@@ -1204,8 +1319,107 @@ def main():
             logging.info("[{}, N/A] Node disconnected".format(address))
             del message_queues[address]
 
+        readable, writable, exceptional = select.select([server_socket] + wallet_inputs, wallet_inputs, wallet_inputs)
+
+        for sock in readable:
+            if sock is wallet_server_socket:
+                client_socket, address = wallet_server_socket.accept()
+                wallet_inputs.append(client_socket)
+
+                logging.info("WS [{}, {}]: Node connected to server")
+
+                if not address in wallet_message_queues:
+                    wallet_message_queues[address] = queue.Queue()
+
+            else:
+                try:
+                    size = sock.recv(5).decode()
+                except connection_errors:
+                    sock.close()
+                    wallet_inputs.remove(sock)
+                else:
+                    if size:
+                        size = int(size, 16)
+
+                        try:
+                            data = sock.recv(size)
+                            address = sock.getpeername()
+                        except connection_errors:
+                            sock.close()
+                            wallet_inputs.remove(sock)
+                        else:
+                            logging.info("WS [{}, {}]: Recieved message from node".format(address[0], address[1]))
+                            reply = wallet_handle_message(data, blockchain)
+
+                            if reply[2] == -1:
+                                logging.info("WS [{}, {}]: Not sending reply to message")
+
+                            elif reply[2] == 1:
+                                if address[0] not in wallet_message_queues:
+                                    wallet_message_queues[address] = queue.Queue()
+                                wallet_message_queues[address].put((reply[0], reply[1]))
+                                logging.info("WS [{}, {}]: Sending reply to sender only".format(address[0], address[1]))
+
+                            elif reply[2] == 2:
+                                for node_socks in sockets:
+                                    try:
+                                        address = node_socks.getpeername()[0]
+                                    except connection_errors:
+                                        pass
+                                    else:
+                                        if address not in message_queues:
+                                            message_queues[address] = queue.Queue()
+                                        message_queues[address].put((reply[0], reply[1]))
+                                logging.info("WS [{}, {}]: Sending reply to all peer nodes".format(address[0], address[1]))
+
+                    else:
+                        sock.close()
+                        wallet_inputs.remove(sock)
+
+
+        for sock in writable:
+            if sock in wallet_inputs:
+                try:
+                    address = sock.getpeername()
+                except connection_errors:
+                    sock.close()
+                    wallet_inputs.remove(sock)
+
+                else:
+                    if address in message_queues:
+                        if not message_queues[address].empty():
+                            message = message_queues[address].get()
+                            try:
+                                sock.send(message[0].encode())
+                            except connection_errors:
+                                sock.close()
+                                wallet_inputs.remove(sock)
+                            else:
+                                logging.info("WS [{}, {}]: Sent {} message to client".format(address[0], address[1], message[1]))
+
+        for sock in exceptional:
+            if sock in wallet_inputs:
+                sock.close()
+                wallet_inputs.remove(sock)
+
+        sock_removals = []
+
+        for address in wallet_message_queues:
+            exists = False
+            for sock in wallet_inputs:
+                try:
+                    if sock.getpeername() == address:
+                        exists = True
+                except connection_errors:
+                    pass
+            if not exists:
+                sock_removals.append(address)
+
+        for address in sock_removals:
+            logging.info("WS [{}, {}]: Client disconnected".format(address[0], address[1]))
+            del wallet_message_queues[address]
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format="%(threadName)s [%(asctime)s]: %(message)s")
     main()
-

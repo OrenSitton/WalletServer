@@ -39,7 +39,7 @@ class Transaction:
     signing_format()
         converts Transaction object into a hexadecimal string of the transaction as per signing protocol
     sha256_hash()
-        calculates sha256 hash of the transaction, per the Blemflark protocol
+        calculates sha256 hash of the transaction, per the SittCoin protocol
 
     Static Methods
     --------------
