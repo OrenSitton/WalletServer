@@ -1175,7 +1175,7 @@ def handle_wallet_payment(message, blockchain):
         use_list = []
         current_amount = 0
         while current_amount < amount and len(use_list) < 15 and t_list:
-            current_amount += t_list[0][0]
+            current_amount += t_list[0][1]
             use_list.append(t_list[0])
             t_list.remove(t_list[0])
 
