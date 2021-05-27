@@ -1049,7 +1049,36 @@ def get_transactions(public_key, blockchain):
     return key_transactions
 
 
-def find_wallet_amonut(public_key, transaction_list, blockchain):
+def get_open_transactions(public_key, blockchain):
+    """
+
+    :param public_key:
+    :type public_key:
+    :param blockchain:
+    :type blockchain:
+    :return:
+    :rtype: list
+    """
+
+    output_transactions  = []
+    for x in range(1, len(blockchain) + 1):
+        for i, t in enumerate(blockchain.get_block_consensus_chain(x).transactions):
+            for output in t.outputs:
+                if output[0] == public_key:
+                    output_transactions.append((t, output[1], x, i + 1))
+
+    open_output_transactions = output_transactions.copy()
+    for t in output_transactions:
+        for i in range(t[2] + 1, len(blockchain) + 1):
+            for other_transaction in blockchain.get_block_consensus_chain(i):
+                for inp in other_transaction.inputs:
+                    if inp[0] == public_key and inp[1] == t[2]:
+                        open_output_transactions.remove(t)
+
+    return open_output_transactions
+
+
+def find_wallet_amount(public_key, transaction_list, blockchain):
     """
 
     :param public_key:
@@ -1076,6 +1105,7 @@ def find_wallet_amonut(public_key, transaction_list, blockchain):
                 wallet_amount += output[1]
     return wallet_amount
 
+
 """
 Wallet Server Functions
 """
@@ -1093,8 +1123,8 @@ def wallet_handle_message(message, blockchain):
     """
 
     message_types = {
-        "i":lambda: handle_wallet_message(message, blockchain),
-        "k":lambda: handle_wallet_payment(message, blockchain),
+        "a":lambda: handle_wallet_message(message, blockchain),
+        "c":lambda: handle_wallet_payment(message, blockchain),
         "e": lambda: handle_message_transaction(message, blockchain)
     }
 
@@ -1107,7 +1137,7 @@ def handle_wallet_message(message, blockchain):
     pub_key = message[1:]
     transactions_list = get_transactions(pub_key, blockchain)
 
-    wallet_amount = find_wallet_amonut(pub_key, transactions_list, blockchain)
+    wallet_amount = find_wallet_amount(pub_key, transactions_list, blockchain)
 
     wallet_amount = hexify(wallet_amount, 8)
 
@@ -1125,7 +1155,53 @@ def handle_wallet_message(message, blockchain):
 
 
 def handle_wallet_payment(message, blockchain):
-    pass
+    src_key = message[1:325]
+
+    amount = int(message[325:329], 16)
+
+    dest_key = message[329:653]
+
+    t_list = get_transactions(src_key, blockchain)
+
+    wallet_amount = find_wallet_amount(src_key, t_list, blockchain)
+
+    if wallet_amount < amount:
+        pass
+        # insufficient funds
+
+    else:
+        t_list = get_open_transactions(src_key, blockchain)
+        # list of (transaction, amount, block number, transaction number)
+        use_list = []
+        current_amount = 0
+        while current_amount < amount and len(use_list) < 15 and t_list:
+            current_amount += t_list[0][0]
+            use_list.append(t_list[0])
+            t_list.remove(t_list[0])
+
+        while current_amount < amount:
+            current_amount -= use_list[0][0]
+            use_list.remove(use_list[0])
+            use_list.append(t_list[0])
+            current_amount += t_list[0][0]
+            t_list.remove(t_list[0])
+
+        while len(use_list) < 15 and t_list:
+            current_amount += t_list[0][0]
+            use_list.append(t_list[0])
+            t_list.remove(t_list[0])
+
+        inputs = []
+        for inp in use_list:
+            inputs.append((src_key, inp[2], inp[3]))
+        outputs = [(dest_key, amount), (src_key, current_amount - amount)]
+        msg = Transaction(datetime.datetime.now().timestamp(), inputs, outputs).signing_format()
+
+        msg = "{}d{}".format(calculate_message_length(msg), msg)
+
+        return msg, "unsigned transaction", 1
+
+    # created signing format to send to user
 
 
 """
