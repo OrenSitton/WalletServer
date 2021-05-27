@@ -1319,7 +1319,7 @@ def main():
             logging.info("[{}, N/A] Node disconnected".format(address))
             del message_queues[address]
 
-        readable, writable, exceptional = select.select([server_socket] + wallet_inputs, wallet_inputs, wallet_inputs)
+        readable, writable, exceptional = select.select([wallet_server_socket] + wallet_inputs, wallet_inputs, wallet_inputs, 0)
 
         for sock in readable:
             if sock is wallet_server_socket:
@@ -1348,7 +1348,7 @@ def main():
                             sock.close()
                             wallet_inputs.remove(sock)
                         else:
-                            logging.info("WS [{}, {}]: Recieved message from node".format(address[0], address[1]))
+                            logging.info("WS [{}, {}]: Received message from node".format(address[0], address[1]))
                             reply = wallet_handle_message(data, blockchain)
 
                             if reply[2] == -1:
