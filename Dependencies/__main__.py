@@ -1200,7 +1200,7 @@ def handle_wallet_payment(message, blockchain):
         for inp in use_list:
             inputs.append((src_key, inp[2], inp[3]))
         outputs = [(destination_key, amount), (src_key, current_amount - amount)]
-        msg = Transaction(datetime.datetime.now().timestamp(), inputs, outputs).signing_format()
+        msg = Transaction(int(datetime.datetime.now().timestamp()), inputs, outputs).signing_format()
 
         msg = "{}d{}".format(calculate_message_length(msg), msg)
 
