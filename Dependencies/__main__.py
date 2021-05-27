@@ -1382,10 +1382,12 @@ def main():
 
                                 elif reply[2] == 1:
                                     logging.info("WS [{}, {}]: Sending reply to sender only".format(address[0], address[1]))
-
-                                    sock.send(reply[0].encode())
-
-                                    logging.info("WS [{}, {}]: Sent {} message to client".format(address[0], address[1], reply[1]))
+                                    try:
+                                        sock.send(reply[0].encode())
+                                    except BlockingIOError:
+                                        logging.info("WS [{}, {}]: Client did not accept {} reply message".format(address[0], address[1], reply[1]))
+                                    else:
+                                        logging.info("WS [{}, {}]: Sent {} message to client".format(address[0], address[1], reply[1]))
 
                                 elif reply[2] == 2:
                                     for node_socks in sockets:
@@ -1404,8 +1406,17 @@ def main():
 
         for sock in exceptional:
             if sock in wallet_inputs:
-                sock.close()
-                wallet_inputs.remove(sock)
+                try:
+                    address = sock.getpeername()
+                except connection_errors:
+                    sock.close()
+                    wallet_inputs.remove(sock)
+
+                    logging.info("WS [N/A, N/A]: Client disconnected")
+                else:
+                    sock.close()
+                    wallet_inputs.remove(sock)
+                    logging.info("WS [{}, {}]: Client disconnected".format(address[0], address[1]))
 
 
 if __name__ == '__main__':
