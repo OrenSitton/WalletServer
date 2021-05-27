@@ -1071,7 +1071,7 @@ def get_open_transactions(public_key, blockchain):
     open_output_transactions = output_transactions.copy()
     for t in output_transactions:
         for i in range(t[2] + 1, len(blockchain) + 1):
-            for other_transaction in blockchain.get_block_consensus_chain(i):
+            for other_transaction in blockchain.get_block_consensus_chain(i).transactions:
                 for inp in other_transaction.inputs:
                     if inp[0] == public_key and inp[1] == t[2]:
                         open_output_transactions.remove(t)
@@ -1430,7 +1430,7 @@ def main():
 
             else:
                 try:
-                    address = sock.getpeername()[0]
+                    address = sock.getpeername()
                 except connection_errors:
                     sock.close()
                     wallet_inputs.remove(sock)
