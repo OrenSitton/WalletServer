@@ -1015,6 +1015,7 @@ def handle_message_transaction(message, blockchain):
             logging.info("Message is an invalid transaction message [{}]".format(msg_validity[1]))
             return None, "", -1
 
+
 """
 Wallet Calculation Functions
 """
@@ -1060,7 +1061,7 @@ def get_open_transactions(public_key, blockchain):
     :rtype: list
     """
 
-    output_transactions  = []
+    output_transactions = []
     for x in range(1, len(blockchain) + 1):
         for i, t in enumerate(blockchain.get_block_consensus_chain(x).transactions):
             for output in t.outputs:
@@ -1122,11 +1123,9 @@ def wallet_handle_message(message, blockchain):
     :rtype: tuple
     """
 
-    message_types = {
-        "a":lambda: handle_wallet_message(message, blockchain),
-        "c":lambda: handle_wallet_payment(message, blockchain),
-        "e": lambda: handle_message_transaction(message, blockchain)
-    }
+    message_types = dict(a=lambda: handle_wallet_message(message, blockchain),
+                         b=lambda: handle_wallet_payment(message, blockchain),
+                         c=lambda: handle_message_transaction(message, blockchain))
 
     message_type = message[:1]
 
@@ -1159,15 +1158,16 @@ def handle_wallet_payment(message, blockchain):
 
     amount = int(message[325:329], 16)
 
-    dest_key = message[329:653]
+    destination_key = message[329:653]
 
     t_list = get_transactions(src_key, blockchain)
 
     wallet_amount = find_wallet_amount(src_key, t_list, blockchain)
 
     if wallet_amount < amount:
-        pass
-        # insufficient funds
+        msg = build_error_message("insufficient funds")
+        msg = "{}{}".format(hexify(msg, 5), msg)
+        return msg, "error", 1
 
     else:
         t_list = get_open_transactions(src_key, blockchain)
@@ -1179,12 +1179,17 @@ def handle_wallet_payment(message, blockchain):
             use_list.append(t_list[0])
             t_list.remove(t_list[0])
 
-        while current_amount < amount:
+        while current_amount < amount and t_list:
             current_amount -= use_list[0][0]
             use_list.remove(use_list[0])
             use_list.append(t_list[0])
             current_amount += t_list[0][0]
             t_list.remove(t_list[0])
+
+        if current_amount < amount:
+            msg = build_error_message("transactions are too limited in size")
+            msg = "{}{}".format(hexify(msg, 5), msg)
+            return msg, "error", 1
 
         while len(use_list) < 15 and t_list:
             current_amount += t_list[0][0]
@@ -1194,14 +1199,12 @@ def handle_wallet_payment(message, blockchain):
         inputs = []
         for inp in use_list:
             inputs.append((src_key, inp[2], inp[3]))
-        outputs = [(dest_key, amount), (src_key, current_amount - amount)]
+        outputs = [(destination_key, amount), (src_key, current_amount - amount)]
         msg = Transaction(datetime.datetime.now().timestamp(), inputs, outputs).signing_format()
 
         msg = "{}d{}".format(calculate_message_length(msg), msg)
 
         return msg, "unsigned transaction", 1
-
-    # created signing format to send to user
 
 
 """
@@ -1284,8 +1287,8 @@ def main():
                     if address[0] not in message_queues:
                         message_queues[address[0]] = queue.Queue()
                     message_queues[address[0]].put((
-                                                   "00047c0000000000000000000000000000000000000000000000000000000000000000000000",
-                                                   "block request"))
+                        "00047c0000000000000000000000000000000000000000000000000000000000000000000000",
+                        "block request"))
 
             else:
                 try:
@@ -1457,13 +1460,19 @@ def main():
                                     logging.info("WS [{}, {}]: Not sending reply to message")
 
                                 elif reply[2] == 1:
-                                    logging.info("WS [{}, {}]: Sending reply to sender only".format(address[0], address[1]))
+                                    logging.info(
+                                        "WS [{}, {}]: Sending reply to sender only".format(address[0], address[1]))
                                     try:
                                         sock.send(reply[0].encode())
                                     except BlockingIOError:
-                                        logging.info("WS [{}, {}]: Client did not accept {} reply message".format(address[0], address[1], reply[1]))
+                                        logging.info(
+                                            "WS [{}, {}]: Client did not accept {} reply message".format(address[0],
+                                                                                                         address[1],
+                                                                                                         reply[1]))
                                     else:
-                                        logging.info("WS [{}, {}]: Sent {} message to client".format(address[0], address[1], reply[1]))
+                                        logging.info(
+                                            "WS [{}, {}]: Sent {} message to client".format(address[0], address[1],
+                                                                                            reply[1]))
 
                                 elif reply[2] == 2:
                                     for node_socks in sockets:
@@ -1475,7 +1484,8 @@ def main():
                                             if address not in message_queues:
                                                 message_queues[address] = queue.Queue()
                                             message_queues[address].put((reply[0], reply[1]))
-                                    logging.info("WS [{}, {}]: Sending reply to all peer nodes".format(address[0], address[1]))
+                                    logging.info(
+                                        "WS [{}, {}]: Sending reply to all peer nodes".format(address[0], address[1]))
                         else:
                             sock.close()
                             wallet_inputs.remove(sock)
