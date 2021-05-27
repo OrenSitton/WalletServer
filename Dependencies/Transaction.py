@@ -168,8 +168,8 @@ class Transaction:
         :return: hexadecimal transaction in signing format
         :rtype: str
         """
-        inputs_amount = len(self.inputs)
-        outputs_amount = len(self.outputs)
+        inputs_amount = hexify(len(self.inputs), 1)
+        outputs_amount = hexify(len(self.outputs), 1)
 
         message = "{}{}".format(inputs_amount, outputs_amount)
 
