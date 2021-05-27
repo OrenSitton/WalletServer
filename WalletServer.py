@@ -90,11 +90,13 @@ class WalletServerWindow(Tk):
         config_window.resizable(width=False, height=False)
 
         with open("Dependencies\\config.cfg", "rb") as infile:
-            configuration_dictionary= pickle.load(infile)
+            configuration_dictionary = pickle.load(infile)
 
         types = {
-            "ip address": str,
-            "port": int,
+            "node ip address": str,
+            "node port": int,
+            "wallet ip address": str,
+            "wallet port": int,
             "seed address": str,
             "seed port": int,
             "sql address": str,
