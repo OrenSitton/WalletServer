@@ -1093,15 +1093,33 @@ def wallet_handle_message(message, blockchain):
     """
 
     message_types = {
-        "h":lambda: handle_wallet_message(message, blockchain),
-        "i":lambda: handle_wallet_payment(message, blockchain),
+        "i":lambda: handle_wallet_message(message, blockchain),
+        "k":lambda: handle_wallet_payment(message, blockchain),
         "e": lambda: handle_message_transaction(message, blockchain)
     }
     pass
 
+
 def handle_wallet_message(message, blockchain):
-    msg = "j"
-    pass
+    pub_key = message[1:]
+    transactions_list = get_transactions(pub_key, blockchain)
+
+    wallet_amount = find_wallet_amonut(pub_key, transactions_list, blockchain)
+
+    wallet_amount = hexify(wallet_amount, 8)
+
+    transactions_amount = hexify(len(transactions_list), 6)
+
+    msg = "j{}{}".format(wallet_amount, transactions_amount)
+
+    for t in transactions_list:
+        length = hexify(len(t.network_format()), 5)
+        msg += "{}{}".format(length, t.network_format())
+
+    msg = "{}{}".format(calculate_message_length(msg), msg)
+
+    return msg, "wallet amount", 1
+
 
 def handle_wallet_payment(message, blockchain):
     pass
