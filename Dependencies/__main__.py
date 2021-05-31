@@ -441,15 +441,16 @@ def validate_transaction_data(transaction, blockchain, previous_block_hash):
             return False, "transaction input's source does not appear in source block"
 
         hasher = SHA256.new(transaction.signing_format().encode("utf-8"))
-        verifier = PKCS1_v1_5.new(RSA.import_key(input1[0]))
-        if not verifier.verify(hasher, input1[3]):
+        key = RSA.import_key(bytes.fromhex(input1[0]))
+        verifier = PKCS1_v1_5.new(key)
+        if not verifier.verify(hasher, bytes.fromhex(input1[3])):
             return False, "signature is not valid"
 
     # input sources and signatures are valid, check that input amount equals output amount
     for output in transaction.outputs:
         output_amount += output[1]
 
-    if not output_amount - input_amount:
+    if not output_amount - input_amount == 0:
         return False, "input and output amounts are not equal"
 
     # input amount equals output amounts, validate that no transactions are a double spend
@@ -490,7 +491,7 @@ def validate_transaction_data_consensus(transaction, blockchain):
 
         appears = False
 
-        for source_output in input_transaction:
+        for source_output in input_transaction.outputs:
             if source_output[0] == input1[0]:
                 appears = True
                 input_amount += source_output[1]
@@ -499,15 +500,15 @@ def validate_transaction_data_consensus(transaction, blockchain):
             return False, "transaction input's source does not appear in source block"
 
         hasher = SHA256.new(transaction.signing_format().encode("utf-8"))
-        verifier = PKCS1_v1_5.new(RSA.import_key(input1[0]))
-        if not verifier.verify(hasher, input1[3]):
+        key = RSA.import_key(bytes.fromhex(input1[0]))
+        verifier = PKCS1_v1_5.new(key)
+        if not verifier.verify(hasher, bytes.fromhex(input1[3])):
             return False, "signature is not valid"
 
     # input sources and signatures are valid, check that input amount equals output amount
     for output in transaction.outputs:
         output_amount += output[1]
-
-    if not output_amount - input_amount:
+    if not output_amount - input_amount == 0:
         return False, "input and output amounts are not equal"
 
     # input amount equals output amounts, validate that no transactions are a double spend
@@ -695,7 +696,7 @@ def handle_message_block(message, blockchain):
         # check if previous block exists
         previous_block = blockchain.get_block_by_hash(block.prev_hash)
         if not previous_block and block.block_number > blockchain.__len__():
-            msg = build_get_blocks_message(blockchain.__len__(), block.block_number)
+            msg = build_get_blocks_message(blockchain.__len__() + 1, block.block_number)
             msg = "{}{}".format(fixed_length_hex(len(msg), 5), msg)
             logging.info("Message is an advanced block")
             return msg, "blocks request", 1
@@ -826,7 +827,7 @@ def handle_message_block_request(message, blockchain):
             try:
                 block = blockchain.get_block_consensus_chain(blockchain.__len__())
             except IndexError:
-                logging.info("Message is an invalid block request [local blockchain does not contain any blocks]")
+                logging.info("Message is an invalid block request [local blockchain does not contain any block]")
                 return None, "", -1
         else:
             # return requested block if have, else return nothing
