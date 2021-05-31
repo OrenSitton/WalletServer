@@ -1,8 +1,8 @@
 """
 Author: Oren Sitton
-File: methods.py
+File: Dependencies\\methods.py
 Python Version: 3
-Description: methods used across multiple files
+Description: file stores methods used across multiple files, to reduce duplicate code
 """
 from hashlib import sha256
 
@@ -21,16 +21,16 @@ def calculate_hash(previous_block_hash, merkle_tree_root_hash, nonce):
     """
 
     if not isinstance(previous_block_hash, str):
-        raise TypeError("calculate_hash: expected prev_block_hash to be of type str")
+        raise TypeError("methods.calculate_hash: expected prev_block_hash to be of type str")
     if not isinstance(merkle_tree_root_hash, str):
-        raise TypeError("calculate_hash: expected merkle_root_hash to be of type str")
+        raise TypeError("methods.calculate_hash: expected merkle_root_hash to be of type str")
     if not isinstance(nonce, int):
-        raise TypeError("calculate_hash: expected nonce to be of type int")
+        raise TypeError("methods.calculate_hash: expected nonce to be of type int")
     value = "{}{}{}".format(previous_block_hash, merkle_tree_root_hash, nonce)
     return sha256(value.encode()).hexdigest()
 
 
-def hexify(number, length):
+def fixed_length_hex(number, length):
     """
     creates hexadecimal value of the number, with prefix zeroes to be of length length
     :param number: number to calculate hex value for, in base 10
@@ -43,14 +43,14 @@ def hexify(number, length):
     :raise: ValueError: message size is larger than length
     """
     if not isinstance(number, int):
-        raise TypeError("Transaction.hexify(number, length): expected number to be of type int")
+        raise TypeError("methods.Hexify: expected number to be of type int")
     if not isinstance(length, int):
-        raise TypeError("Transaction.hexify(number, length): expected length to be of type int")
+        raise TypeError("methods.hexify: expected length to be of type int")
     if number < 0:
-        raise ValueError("Transaction.hexify(number, length): expected non-negative value for number, received {} "
+        raise ValueError("methods.hexify: expected non-negative value for number, received {} "
                          "instead".format(number))
     if length < 0:
-        raise ValueError("Transaction.hexify(number, length): expected non-negative value for length, received {} "
+        raise ValueError("methods.hexify: expected non-negative value for length, received {} "
                          "instead".format(length))
 
     hex_base = hex(number)[2:]
@@ -59,7 +59,7 @@ def hexify(number, length):
         hex_base = (length - len(hex_base)) * "0" + hex_base
         return hex_base
     else:
-        raise ValueError("hexify: hexadecimal string size is larger than length")
+        raise ValueError("methods.hexify: hexadecimal string size is larger than length")
 
 
 def hexify_string(string):
@@ -74,5 +74,12 @@ def hexify_string(string):
 
 
 def dehexify_string(hex_string):
+    """
+    reverts utf-8 encoded string (stored as hex string) back to regular string
+    :param hex_string: utf-8 encoded hex string
+    :type hex_string: str
+    :return: regular string
+    :rtype: str
+    """
     return bytes.fromhex(hex_string).decode()
-    pass
+

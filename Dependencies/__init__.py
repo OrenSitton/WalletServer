@@ -1,6 +1,6 @@
 """
 Author: Oren Sitton
-File: __init__.py
+File: Dependencies\\__init__.py
 Python Version: 3
 """
 import logging
@@ -15,15 +15,10 @@ try:
     from Dependencies.methods import *
 
 except ModuleNotFoundError:
-    try:
-        from FullNode.Dependencies.Blockchain import Blockchain
-        from FullNode.Dependencies.Block import Block
-        from FullNode.Dependencies.SyncedArray import SyncedArray
-        from FullNode.Dependencies.Transaction import Transaction
-        from FullNode.Dependencies.SyncedDictionary import SyncedDictionary
+    from WalletServer.Dependencies.Blockchain import Blockchain
+    from WalletServer.Dependencies.Block import Block
+    from WalletServer.Dependencies.SyncedArray import SyncedArray
+    from WalletServer.Dependencies.Transaction import Transaction
+    from WalletServer.Dependencies.SyncedDictionary import SyncedDictionary
 
-        from FullNode.Dependencies.methods import *
-
-    except ModuleNotFoundError:
-        logging.critical("Could not find dependencies")
-        exit(-1)
+    from WalletServer.Dependencies.methods import *

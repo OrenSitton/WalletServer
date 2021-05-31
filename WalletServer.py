@@ -38,7 +38,7 @@ class WalletServerWindow(Tk):
         self.resizable(width=False, height=False)
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-        self.title = Label(self, width=20, text="SittCoin Full Node", font=("Palatino", 20))
+        self.title = Label(self, width=20, text="SittCoin Wallet Server", font=("Palatino", 20))
 
         self.run_button = Button(self, width=10, text="Run\n▶", font=("Times New Roman", 12), command=self.run_command)
         self.terminate_button = Button(self, width=10, text="Terminate\n■", font=("Times New Roman", 12), command=self.terminate_command)
@@ -119,9 +119,9 @@ class WalletServerWindow(Tk):
             frame.pack(side=tk.TOP)
             entries.append((label, entry))
 
-        run_button = tk.Button(config_window, width=10, text="⚙",
+        run_button = tk.Button(config_window, width=10, text="Configure", font=("Times New Roman", 12),
                                command=lambda: self.config(configuration_dictionary, entries, types, config_window))
-        run_button.pack(side=tk.TOP)
+        run_button.pack(side=tk.TOP, pady=10)
 
         config_window.mainloop()
 

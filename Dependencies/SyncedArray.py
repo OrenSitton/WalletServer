@@ -1,6 +1,6 @@
 """
 Author: Oren Sitton
-File: SyncedArray.py
+File: Dependencies\\SyncedArray.py
 Python Version: 3
 """
 import threading

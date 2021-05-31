@@ -1,6 +1,6 @@
 """
 Author: Oren Sitton
-File: SyncedDictionary.py
+File: Dependencies\\SyncedDictionary.py
 Python Version: 3
 """
 from threading import Semaphore, Lock
@@ -12,10 +12,8 @@ class SyncedDictionary:
 
     Attributes
     ----------
-    __SyncedDictionary : dict
+    __dict : dict
         a dictionary containing the SyncedDictionary
-    name : str
-        the name of the list (default "list")
     max_readers : int
         the maximum amount of simultaneous readers per instance (default 2)
     semaphore_lock : Semaphore

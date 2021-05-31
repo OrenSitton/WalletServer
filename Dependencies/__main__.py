@@ -1,6 +1,6 @@
 """
 Author: Oren Sitton
-File: __main__.py
+File: Dependencies\\__main__.py
 Python Version: 3
 Description: main FullNode program, runs full node (p2p network connection, block mining)
 """
@@ -37,24 +37,20 @@ try:
     from Dependencies import SyncedArray
     from Dependencies import Transaction
     from Dependencies import calculate_hash
-    from Dependencies import hexify
+    from Dependencies import fixed_length_hex
     from Dependencies import hexify_string
     from Dependencies import dehexify_string
 
 except ModuleNotFoundError:
-    try:
         from WalletServer.Dependencies import Block
         from WalletServer.Dependencies import Blockchain
         from WalletServer.Dependencies import SyncedDictionary
         from WalletServer.Dependencies import SyncedArray
         from WalletServer.Dependencies import Transaction
         from WalletServer.Dependencies import calculate_hash
-        from WalletServer.Dependencies import hexify
+        from WalletServer.Dependencies import fixed_length_hex
         from WalletServer.Dependencies import hexify_string
         from WalletServer.Dependencies import dehexify_string
-    except ModuleNotFoundError:
-        logging.critical("Could not find dependencies")
-        exit(-1)
 
 """
 Global Variables
@@ -361,13 +357,13 @@ def calculate_message_length(message):
 
     while resume:
         try:
-            hexify(len(message), length_size)
+            fixed_length_hex(len(message), length_size)
 
         except ValueError:
             length_size *= 2
 
         else:
-            if hexify(len(message), length_size).replace('f', "") == "":
+            if fixed_length_hex(len(message), length_size).replace('f', "") == "":
                 length_size *= 2
             else:
                 resume = False
@@ -376,7 +372,7 @@ def calculate_message_length(message):
     for x in range(5, length_size, 5):
         msg_length += "f" * x
 
-    msg_length += hexify(len(message), length_size)
+    msg_length += fixed_length_hex(len(message), length_size)
     return msg_length
 
 
@@ -547,7 +543,7 @@ def validate_transaction_format(transaction):
 
     # transaction inputs are in order, validate that transaction outputs are in order\
     for x in range(0, len(transaction.outputs) - 1):
-        if int(transaction.outputs[x][0], 16) > int(transaction.outputs[x][0]):
+        if int(transaction.outputs[x][0], 16) > int(transaction.outputs[x][0], 16):
             return False, "outputs order invalid"
 
     # transaction outputs are in order, validate that input sources don't appear twice
@@ -587,7 +583,7 @@ def build_get_blocks_message(first_block_number, last_block_number):
         raise TypeError("build_get_blocks_message: expected first_block_number to be of type int")
     if not isinstance(last_block_number, int):
         raise TypeError("build_get_blocks_message: expected last_block_number to be of type int")
-    message = "g{}{}".format(hexify(first_block_number, 6), hexify(last_block_number, 6))
+    message = "g{}{}".format(fixed_length_hex(first_block_number, 6), fixed_length_hex(last_block_number, 6))
     return message
 
 
@@ -618,11 +614,11 @@ def build_peers_message(peers_list):
     for p in peers_list:
         if not isinstance(p, str):
             raise TypeError("build_peers_message: expected peers_list to be a list of type str")
-    message = "b{}".format(hexify(len(peers_list), 2))
+    message = "b{}".format(fixed_length_hex(len(peers_list), 2))
     for address in peers_list:
         address_bytes = address.split(".")
         for byte in address_bytes:
-            message += hexify(int(byte), 2)
+            message += fixed_length_hex(int(byte), 2)
     return message
 
 
@@ -680,7 +676,7 @@ def handle_message_block(message, blockchain):
     if not isinstance(blockchain, Blockchain):
         raise TypeError("handle_message_block: expected blockchain to be type Blockchain")
     try:
-        block = Block.from_network_format(message)
+        block = Block.parse(message)
     except ValueError:
         logging.info("Message is an invavlid block [message is in an incorrect format]")
         return None, "", -1
@@ -700,7 +696,7 @@ def handle_message_block(message, blockchain):
         previous_block = blockchain.get_block_by_hash(block.prev_hash)
         if not previous_block and block.block_number > blockchain.__len__():
             msg = build_get_blocks_message(blockchain.__len__(), block.block_number)
-            msg = "{}{}".format(hexify(len(msg), 5), msg)
+            msg = "{}{}".format(fixed_length_hex(len(msg), 5), msg)
             logging.info("Message is an advanced block")
             return msg, "blocks request", 1
         elif not previous_block:
@@ -904,7 +900,7 @@ def handle_message_blocks_request(message, blockchain):
     first_block = int(message[1:7], 16)
     last_block = int(message[7:13], 16)
 
-    reply = "h{}".format(hexify(last_block - first_block + 1, 6))
+    reply = "h{}".format(fixed_length_hex(last_block - first_block + 1, 6))
 
     for i in range(first_block, last_block + 1):
         try:
@@ -978,7 +974,7 @@ def handle_message_peers_request():
     """
     logging.info("Message is a peer request message")
     reply = build_peers_message(sockets.array)
-    reply = "{}{}".format(hexify(len(reply), 5), reply)
+    reply = "{}{}".format(fixed_length_hex(len(reply), 5), reply)
     return reply, "peers", 1
 
 
@@ -997,7 +993,7 @@ def handle_message_transaction(message, blockchain):
     if not isinstance(blockchain, Blockchain):
         raise TypeError("handle_message_transaction: expected blockchain to be of type Blockchain")
     try:
-        transaction = Transaction.from_network_format(message)
+        transaction = Transaction.parse(message)
     except ValueError:
         logging.info("Message is an invalid transaction message [message format invalid]")
         return None, "", -1
@@ -1009,7 +1005,7 @@ def handle_message_transaction(message, blockchain):
         if msg_validity[0]:
             transactions.append(transaction)
             logging.info("Message is a transaction message")
-            msg = "{}{}".format(hexify(len(message), 5), message)
+            msg = "{}{}".format(fixed_length_hex(len(message), 5), message)
             return msg, "transaction", 2
         else:
             logging.info("Message is an invalid transaction message [{}]".format(msg_validity[1]))
@@ -1122,7 +1118,6 @@ def wallet_handle_message(message, blockchain):
     :return:
     :rtype: tuple
     """
-
     message_types = dict(a=lambda: handle_wallet_message(message, blockchain),
                          c=lambda: handle_wallet_payment(message, blockchain),
                          e=lambda: handle_message_transaction(message, blockchain))
@@ -1138,14 +1133,14 @@ def handle_wallet_message(message, blockchain):
 
     wallet_amount = find_wallet_amount(pub_key, transactions_list, blockchain)
 
-    wallet_amount = hexify(wallet_amount, 8)
+    wallet_amount = fixed_length_hex(wallet_amount, 8)
 
-    transactions_amount = hexify(len(transactions_list), 6)
+    transactions_amount = fixed_length_hex(len(transactions_list), 6)
 
     msg = "j{}{}".format(wallet_amount, transactions_amount)
 
     for t in transactions_list:
-        length = hexify(len(t.network_format()), 5)
+        length = fixed_length_hex(len(t.network_format()), 5)
         msg += "{}{}".format(length, t.network_format())
 
     msg = "{}{}".format(calculate_message_length(msg), msg)
@@ -1158,15 +1153,14 @@ def handle_wallet_payment(message, blockchain):
 
     amount = int(message[325:329], 16)
 
-    destination_key = message[329:653]
-
+    destination_key = message[329:]
     t_list = get_transactions(src_key, blockchain)
 
     wallet_amount = find_wallet_amount(src_key, t_list, blockchain)
 
     if wallet_amount < amount:
         msg = build_error_message("insufficient funds")
-        msg = "{}{}".format(hexify(len(msg), 5), msg)
+        msg = "{}{}".format(fixed_length_hex(len(msg), 5), msg)
         return msg, "error", 1
 
     else:
@@ -1188,7 +1182,7 @@ def handle_wallet_payment(message, blockchain):
 
         if current_amount < amount:
             msg = build_error_message("transactions are too limited in size")
-            msg = "{}{}".format(hexify(msg, 5), msg)
+            msg = "{}{}".format(fixed_length_hex(msg, 5), msg)
             return msg, "error", 1
 
         while len(use_list) < 15 and t_list:
@@ -1200,7 +1194,8 @@ def handle_wallet_payment(message, blockchain):
         for inp in use_list:
             inputs.append((src_key, inp[2], inp[3], ""))
         outputs = [(destination_key, amount), (src_key, current_amount - amount)]
-        msg = Transaction(int(datetime.datetime.now().timestamp()), inputs, outputs).signing_format()
+        t = Transaction(int(datetime.datetime.now().timestamp()), inputs, outputs)
+        msg = t.signing_format()
 
         msg = "{}d{}".format(calculate_message_length(msg), msg)
 
@@ -1426,7 +1421,7 @@ def main():
                 client_socket.setblocking(False)
                 wallet_inputs.append(client_socket)
 
-                logging.info("WS [{}, {}]: Node connected to server")
+                logging.info("WS [{}, {}]: Client connected to server")
 
             else:
                 try:
@@ -1451,9 +1446,9 @@ def main():
                             except connection_errors:
                                 sock.close()
                                 wallet_inputs.remove(sock)
-                                logging.info("[{}, {}]: Client disconnected".format(address[0], address[1]))
+                                logging.info("WS [{}, {}]: Client disconnected".format(address[0], address[1]))
                             else:
-                                logging.info("WS [{}, {}]: Received message from node".format(address[0], address[1]))
+                                logging.info("WS [{}, {}]: Received message from client".format(address[0], address[1]))
                                 reply = wallet_handle_message(data, blockchain)
 
                                 if reply[2] == -1:

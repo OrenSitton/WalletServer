@@ -1,23 +1,20 @@
 """
 Author: Oren Sitton
-File: Block.py
+File: Dependencies\\Block.py
 Python Version: 3
+Description: Block class, used to get blocks from MySQL Blockchain
 """
 try:
     from Dependencies.Transaction import Transaction
-    from Dependencies.methods import calculate_hash, hexify
+    from Dependencies.methods import calculate_hash, fixed_length_hex
 except ModuleNotFoundError:
-    try:
-        from FullNode.Dependencies.Transaction import Transaction
-        from FullNode.Dependencies.methods import calculate_hash, hexify
-
-    except ModuleNotFoundError:
-        raise ModuleNotFoundError
+    from WalletServer.Dependencies.Transaction import Transaction
+    from WalletServer.Dependencies.methods import calculate_hash, hexify
 
 
 class Block:
     """
-    Block class, used to get and append blocks from Blockchain
+    Block class, used to get blocks from MySQL blockchain
 
     Attributes
     ----------
@@ -47,14 +44,14 @@ class Block:
 
     Static Methods
     --------------
-    from_network_format(message)
+    parse(message)
         returns a Block object from a network format message
     """
 
     def __init__(self, block):
         """
         initiator for Block object
-        :param block: block from Blockchain
+        :param block: block from Blockchain (MySQL returns rows as tuples of all column values)
         :type block: tuple
         """
         if not isinstance(block, tuple):
@@ -73,10 +70,15 @@ class Block:
         else:
             transaction_data = transaction_data.decode().split(",")
         for t in transaction_data:
-            self.transactions.append(Transaction.from_network_format(t))
+            self.transactions.append(Transaction.parse(t))
         self.self_hash = block[8]
 
     def __str__(self):
+        """
+        format the block as a readable string
+        :return: formatted block string
+        :rtype: str
+        """
         return_string = "Block Number: {}\nTimestamp: {}\nDifficulty: {}\nNonce: {}\nPrevious Hash: {}\nMerkle Root " \
                         "Hash: {}\n".format(self.block_number, self.timestamp, self.difficulty, self.nonce,
                                             self.prev_hash, self.merkle_root_hash)
@@ -89,24 +91,24 @@ class Block:
 
     def network_format(self):
         """
-        returns the Block in the network format
+        returns the Block in the network format (per the network protocol)
         :return: block in the network format
         :rtype: str
         """
-        network_format = "d{}{}{}{}{}{}{}".format(hexify(self.block_number, 6), hexify(self.timestamp, 8),
-                                                  hexify(self.difficulty, 2), hexify(self.nonce, 64), self.prev_hash,
-                                                  self.merkle_root_hash, hexify(len(self.transactions), 2))
+        network_format = "d{}{}{}{}{}{}{}".format(fixed_length_hex(self.block_number, 6), fixed_length_hex(self.timestamp, 8),
+                                                  fixed_length_hex(self.difficulty, 2), fixed_length_hex(self.nonce, 64), self.prev_hash,
+                                                  self.merkle_root_hash, fixed_length_hex(len(self.transactions), 2))
         for t in self.transactions:
             if isinstance(t, str):
-                t = Transaction.from_network_format(t)
-            network_format += hexify(len(t.network_format()), 5)
+                t = Transaction.parse(t)
+            network_format += fixed_length_hex(len(t.network_format()), 5)
             network_format += t.network_format()
         return network_format
 
     @staticmethod
-    def from_network_format(message):
+    def parse(message):
         """
-        returns a Block object from a network format message
+        returns a Block object from a network format message (per the network protocol)
         :param message: block message
         :type message: str
         :return: Block object from network message
@@ -143,8 +145,6 @@ class Block:
 
 
 def main():
-    print(Block.from_network_format(
-        "d00000160aabee816000000000000000000000000000000000000000000000000000000000053cbe50000000000000000000000000000000000000000000000000000000000000000f5add82b07777f5c4f0aee11f21dee1a78729664339bb667021c1df7e46365e80100153e60aabea40130819f300d06092a864886f70d010101050003818d0030818902818100cd3074f8fd25a61e035854a2a6a7d8542272eac398bbd6dbecea9e841f83fe061702789c28b606ead420dc6a5845b9b79e78bba4e2df403e5d42ca455981fbf07e0beeb5bd63d4ba5695dc52a9af652543577e8f4eaf8cb1da98a1dd0b6ee09882ec38c845b6a026285489ede929c617db74bc1368eb51501688b760c76b85e70203010001000a"))
     pass
 
 

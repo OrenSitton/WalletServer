@@ -1,10 +1,11 @@
 """
 Author: Oren Sitton
-File: Blockchain.py
+File: Dependencies\\Blockchain.py
 Python Version: 3
+Description: Blockchain class, used as an interface for a blockchain stored on a MySQL server
 """
 
-from threading import Semaphore, Lock
+import threading
 
 from mysql import connector
 
@@ -12,11 +13,8 @@ try:
     from Dependencies.Block import Block
     from Dependencies.Transaction import Transaction
 except ModuleNotFoundError:
-    try:
-        from FullNode.Dependencies.Block import Block
-        from FullNode.Dependencies.Transaction import Transaction
-    except ModuleNotFoundError:
-        raise ModuleNotFoundError
+    from WalletServer.Dependencies.Block import Block
+    from WalletServer.Dependencies.Transaction import Transaction
 
 
 class Blockchain:
@@ -45,6 +43,7 @@ class Blockchain:
         __len__()
             calculates the length of the Blockchain's consensus chain
         __sizeof__()
+
         append(block_number, timestamp, size, prev_hash, difficulty, nonce, merkle_root_hash, transactions, self_hash)
             appends new block to the blockchain database
         delete
@@ -53,21 +52,16 @@ class Blockchain:
             get method for blocks with certain hash
         get_block_consensus_chain(block_number)
             get method for blocks on the consensus (longest) chain
-
-        Static Methods
-        --------------
-        datetime_string_posix(datetime_string)
-            converts sql datetime string to posix time
         """
 
     def __init__(self, host="localhost", user="root", password="root"):
         """
         initiator for Blockchain objects
-        :param host: host address of MySQL server, default 127.0.0.1
+        :param host: host address of MySQL server, default 127.0.0.1 (localhost)
         :type host: str
-        :param user: MySQL server username
+        :param user: MySQL server username, default root
         :type user: str
-        :param password: MySQL server password
+        :param password: MySQL server password, default root
         :type password: str
         """
         if not isinstance(host, str):
@@ -77,7 +71,7 @@ class Blockchain:
         if not isinstance(password, str):
             raise TypeError("Blockchain.__init__: expected password to be of type str")
 
-        self.lock = Lock()
+        self.lock = threading.Lock()
 
         # connect to MySQL server
         self.db = connector.connect(
@@ -96,18 +90,19 @@ class Blockchain:
         # set cursor's database to Blockchain
         self.db.database = "Blockchain"
 
-        # create Block table in Blockchain database if it doesn't exist yet
+        # create Blocks table in Blockchain database if it doesn't exist yet
         self.cursor.execute("CREATE TABLE if not EXISTS Blocks (id int UNSIGNED PRIMARY KEY AUTO_INCREMENT, "
                             "block_number INT UNSIGNED, timestamp BIT(32),"
                             "difficulty SMALLINT, nonce VARCHAR(64) NOT NULL, prev_hash VARCHAR(64) NOT NULL,"
                             "merkle_root_hash VARCHAR(64), transactions LONGBLOB, self_hash VARCHAR(64))")
 
+        # append genesis block if it doesn't exist yet
         if self.__sizeof__() == 0:
             self.append(0, 0, 0, 0, "", "", [], "")
 
     def __getitem__(self, block_number, prev_hash=""):
         """
-        return the block(s) at the requested number
+        return the block(s) at the requested number, and with the prev_hash (if specified)
         :param block_number: number of the block(s) to return
         :type block_number: int
         :return: requested block(s)
@@ -131,17 +126,18 @@ class Blockchain:
         self.lock.release()
 
         for x in range(len(results)):
+            # convert results into Block objects
             results[x] = Block(results[x])
 
         if results and not prev_hash:
             return results
 
-        elif results:
+        elif results:  # certain prev_hash requested
             for result in results:
-                if result[3] == prev_hash:
+                if result[3] == prev_hash:  # result's previous hash equals prev_hash
                     return [result]
 
-        self.lock.release()
+        # no result matches the requested prev_hash
         return None
 
     def __len__(self):
@@ -159,8 +155,10 @@ class Blockchain:
         self.lock.release()
 
         if block:
+            # db contains blocks
             return block[0][1]
         else:
+            # db is empty, return 0
             return 0
 
     def __sizeof__(self):
@@ -266,8 +264,10 @@ class Blockchain:
         self.lock.release()
 
         if result:
+            # found block that has block_hash
             return Block(result[0])
         else:
+            # no block in db has block_hash
             return None
 
     def get_block_consensus_chain(self, block_number):
@@ -289,6 +289,7 @@ class Blockchain:
             raise TypeError("Blockchain.get_blocks: expected block number to be of type int")
 
         if block_number < self.__len__() - 1:
+            # any block with block_number < self.__len__() - 1 is in the consensus chain
             return self.__getitem__(block_number)[0]
 
         self.lock.acquire()
@@ -299,11 +300,14 @@ class Blockchain:
         self.lock.release()
 
         for x in range(len(results)):
+            # convert results into Block objects
             results[x] = Block(results[x])
 
         if len(results) == 1:
+            # if only one block is returned, it is in the consensus chain
             return results[0]
         else:
+            # find block with the minimum timestamp, it is the default consensus chain
             minimum_posix = results[0]
             for result in results:
                 if result.timestamp < minimum_posix.timestamp:
