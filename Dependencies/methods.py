@@ -81,5 +81,5 @@ def dehexify_string(hex_string):
     :return: regular string
     :rtype: str
     """
-    return bytes.fromhex(hex_string).decode()
+    return bytes.fromhex(hex_string).decode("utf-8")
 
