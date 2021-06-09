@@ -1001,9 +1001,11 @@ def handle_message_transaction(message, blockchain):
         logging.info("Message is an invalid transaction message [message format invalid]")
         return None, "", -1
     else:
-        if transaction in transactions:
-            logging.info("Message is a previously received transaction message")
-            return None, "", -1
+        for t in transactions:
+            if transaction.sha256_hash() == t.sha256_hash():
+                logging.info("Message is a previously received transaction message")
+                return None, "", -1
+
         msg_validity = validate_transaction(transaction, blockchain)
         if msg_validity[0]:
             transactions.append(transaction)
